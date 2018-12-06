@@ -113,6 +113,8 @@ public class LineRenderer extends AbstractRenderer {
             }
         }
 
+        boolean noSoftWrap = Boolean.TRUE.equals(this.<Boolean>getOwnProperty(Property.NO_SOFT_WRAP_INLINE));
+
         LineLayoutContext lineLayoutContext = layoutContext instanceof LineLayoutContext ? (LineLayoutContext) layoutContext : new LineLayoutContext(layoutContext);
         if (lineLayoutContext.getTextIndent() != 0) {
             layoutBox
@@ -132,7 +134,12 @@ public class LineRenderer extends AbstractRenderer {
         int childPos = 0;
 
         MinMaxWidth minMaxWidth = new MinMaxWidth();
-        AbstractWidthHandler widthHandler = new MaxSumWidthHandler(minMaxWidth);
+        AbstractWidthHandler widthHandler;
+        if (noSoftWrap) {
+            widthHandler = new SumSumWidthHandler(minMaxWidth);
+        } else {
+            widthHandler = new MaxSumWidthHandler(minMaxWidth);
+        }
 
         updateChildrenParent();
 
@@ -302,16 +309,24 @@ public class LineRenderer extends AbstractRenderer {
             if (!childWidthWasReplaced) {
                 if (isInlineBlockChild && childRenderer instanceof AbstractRenderer) {
                     childBlockMinMaxWidth = ((AbstractRenderer) childRenderer).getMinMaxWidth();
-                    float childMaxWidth = childBlockMinMaxWidth.getMaxWidth() + MIN_MAX_WIDTH_CORRECTION_EPS;
+                    float childMaxWidth = childBlockMinMaxWidth.getMaxWidth();
                     float lineFullAvailableWidth = layoutContext.getArea().getBBox().getWidth() - lineLayoutContext.getTextIndent();
-                    if (childMaxWidth > bbox.getWidth() && bbox.getWidth() != lineFullAvailableWidth) {
+                    if (!noSoftWrap && childMaxWidth > bbox.getWidth() + MIN_MAX_WIDTH_CORRECTION_EPS && bbox.getWidth() != lineFullAvailableWidth) {
                         childResult = new LineLayoutResult(LayoutResult.NOTHING, null, null, childRenderer, childRenderer);
                     } else {
-                        if (bbox.getWidth() == lineFullAvailableWidth && childBlockMinMaxWidth.getMinWidth() > lineFullAvailableWidth) {
+                        childMaxWidth += MIN_MAX_WIDTH_CORRECTION_EPS;
+                        float inlineBlockWidth = Math.min(childMaxWidth, lineFullAvailableWidth);
+
+                        if (!isOverflowFit(this.<OverflowPropertyValue>getProperty(Property.OVERFLOW_X))) {
+                            float childMinWidth = childBlockMinMaxWidth.getMinWidth() + MIN_MAX_WIDTH_CORRECTION_EPS;
+                            inlineBlockWidth = Math.max(childMinWidth, inlineBlockWidth);
+                        }
+                        bbox.setWidth(inlineBlockWidth);
+
+                        if (childBlockMinMaxWidth.getMinWidth() > bbox.getWidth()) {
                             LoggerFactory.getLogger(LineRenderer.class).warn(LogMessageConstant.INLINE_BLOCK_ELEMENT_WILL_BE_CLIPPED);
                             childRenderer.setProperty(Property.FORCED_PLACEMENT, true);
                         }
-                        bbox.setWidth(Math.min(childMaxWidth, lineFullAvailableWidth));
                     }
                     childBlockMinMaxWidth.setChildrenMaxWidth(childBlockMinMaxWidth.getChildrenMaxWidth() + MIN_MAX_WIDTH_CORRECTION_EPS);
                     childBlockMinMaxWidth.setChildrenMinWidth(childBlockMinMaxWidth.getChildrenMinWidth() + MIN_MAX_WIDTH_CORRECTION_EPS);
@@ -389,6 +404,7 @@ public class LineRenderer extends AbstractRenderer {
             boolean newLineOccurred = (childResult instanceof TextLayoutResult && ((TextLayoutResult) childResult).isSplitForcedByNewline());
             boolean shouldBreakLayouting = childResult.getStatus() != LayoutResult.FULL || newLineOccurred;
 
+            float currChildTextIndent = anythingPlaced ? 0 : lineLayoutContext.getTextIndent();
             if (hangingTabStop != null
                     && (TabAlignment.LEFT == hangingTabStop.getTabAlignment() || shouldBreakLayouting || childRenderers.size() - 1 == childPos || childRenderers.get(childPos + 1) instanceof TabRenderer)) {
                 IRenderer tabRenderer = childRenderers.get(lastTabIndex);
@@ -412,15 +428,15 @@ public class LineRenderer extends AbstractRenderer {
                 } else {
                     curWidth += tabAndNextElemWidth;
                 }
-                widthHandler.updateMinChildWidth(minChildWidth);
-                widthHandler.updateMaxChildWidth(tabWidth + maxChildWidth);
+                widthHandler.updateMinChildWidth(minChildWidth + currChildTextIndent);
+                widthHandler.updateMaxChildWidth(tabWidth + maxChildWidth + currChildTextIndent);
                 hangingTabStop = null;
             } else if (null == hangingTabStop) {
                 if (childResult.getOccupiedArea() != null && childResult.getOccupiedArea().getBBox() != null) {
                     curWidth += childResult.getOccupiedArea().getBBox().getWidth();
                 }
-                widthHandler.updateMinChildWidth(minChildWidth);
-                widthHandler.updateMaxChildWidth(maxChildWidth);
+                widthHandler.updateMinChildWidth(minChildWidth + currChildTextIndent);
+                widthHandler.updateMaxChildWidth(maxChildWidth + currChildTextIndent);
             }
             occupiedArea.setBBox(new Rectangle(layoutBox.getX(), layoutBox.getY() + layoutBox.getHeight() - maxHeight, curWidth, maxHeight));
 
@@ -458,7 +474,8 @@ public class LineRenderer extends AbstractRenderer {
                         if (isInlineBlockChild && !forcePlacement && !isInlineBlockAndFirstOnRootArea) {
                             split[1].childRenderers.add(childRenderer);
                         } else {
-                            if (isInlineBlockChild && childResult.getOverflowRenderer().getChildRenderers().size() == 0) {
+                            if (isInlineBlockChild && childResult.getOverflowRenderer().getChildRenderers().size() == 0
+                                    && childResult.getStatus() == LayoutResult.PARTIAL) {
                                 LoggerFactory.getLogger(LineRenderer.class).warn(LogMessageConstant.INLINE_BLOCK_ELEMENT_WILL_BE_CLIPPED);
                             } else {
                                 split[1].childRenderers.add(childResult.getOverflowRenderer());
@@ -644,7 +661,16 @@ public class LineRenderer extends AbstractRenderer {
                                 Logger logger = LoggerFactory.getLogger(LineRenderer.class);
                                 logger.error(MessageFormatUtil.format(LogMessageConstant.PROPERTY_IN_PERCENTS_NOT_SUPPORTED, Property.MARGIN_LEFT));
                             }
-                            currentWidth += margins[1].getValue() + margins[3].getValue();
+                            UnitValue[] paddings = ((TextRenderer) child).getPaddings();
+                            if (!paddings[1].isPointValue()) {
+                                Logger logger = LoggerFactory.getLogger(LineRenderer.class);
+                                logger.error(MessageFormatUtil.format(LogMessageConstant.PROPERTY_IN_PERCENTS_NOT_SUPPORTED, Property.PADDING_RIGHT));
+                            }
+                            if (!paddings[3].isPointValue()) {
+                                Logger logger = LoggerFactory.getLogger(LineRenderer.class);
+                                logger.error(MessageFormatUtil.format(LogMessageConstant.PROPERTY_IN_PERCENTS_NOT_SUPPORTED, Property.PADDING_LEFT));
+                            }
+                            currentWidth += margins[1].getValue() + margins[3].getValue() + paddings[1].getValue() + paddings[3].getValue();
                             ((TextRenderer) child).occupiedArea.getBBox().setX(currentXPos).setWidth(currentWidth);
                         } else {
                             currentWidth = child.getOccupiedArea().getBBox().getWidth();
@@ -753,8 +779,10 @@ public class LineRenderer extends AbstractRenderer {
             childX = lastRightPos;
             if (child instanceof TextRenderer) {
                 float childHSCale = (float) ((TextRenderer) child).getPropertyAsFloat(Property.HORIZONTAL_SCALING, 1f);
-                child.setProperty(Property.CHARACTER_SPACING, characterSpacing / childHSCale);
-                child.setProperty(Property.WORD_SPACING, wordSpacing / childHSCale);
+                Float oldCharacterSpacing =  ((TextRenderer)child).getPropertyAsFloat(Property.CHARACTER_SPACING);
+                Float oldWordSpacing =  ((TextRenderer)child).getPropertyAsFloat(Property.WORD_SPACING);
+                child.setProperty(Property.CHARACTER_SPACING, (null == oldCharacterSpacing ? 0 : (float) oldCharacterSpacing) + characterSpacing / childHSCale);
+                child.setProperty(Property.WORD_SPACING, (null == oldWordSpacing ? 0 : (float) oldWordSpacing) + wordSpacing / childHSCale);
                 boolean isLastTextRenderer = child == lastChildRenderer;
                 float widthAddition = (isLastTextRenderer ? (((TextRenderer) child).lineLength() - 1) : ((TextRenderer) child).lineLength()) * characterSpacing +
                         wordSpacing * ((TextRenderer) child).getNumberOfSpaces();

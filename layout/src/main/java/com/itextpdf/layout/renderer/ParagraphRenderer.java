@@ -57,6 +57,7 @@ import com.itextpdf.layout.layout.MinMaxWidthLayoutResult;
 import com.itextpdf.layout.margincollapse.MarginsCollapseHandler;
 import com.itextpdf.layout.minmaxwidth.MinMaxWidth;
 import com.itextpdf.layout.minmaxwidth.MinMaxWidthUtils;
+import com.itextpdf.layout.property.BaseDirection;
 import com.itextpdf.layout.property.FloatPropertyValue;
 import com.itextpdf.layout.property.Leading;
 import com.itextpdf.layout.property.OverflowPropertyValue;
@@ -110,6 +111,9 @@ public class ParagraphRenderer extends BlockRenderer {
         }
 
         OverflowPropertyValue overflowX = this.<OverflowPropertyValue>getProperty(Property.OVERFLOW_X);
+
+        Boolean nowrapProp = this.getPropertyAsBoolean(Property.NO_SOFT_WRAP_INLINE);
+        currentRenderer.setProperty(Property.NO_SOFT_WRAP_INLINE, nowrapProp);
 
         boolean notAllKidsAreFloats = false;
         List<Rectangle> floatRendererAreas = layoutContext.getFloatRendererAreas();
@@ -233,8 +237,8 @@ public class ParagraphRenderer extends BlockRenderer {
                 maxChildWidth = ((MinMaxWidthLayoutResult)result).getMinMaxWidth().getMaxWidth();
             }
 
-            widthHandler.updateMinChildWidth(minChildWidth + lineIndent);
-            widthHandler.updateMaxChildWidth(maxChildWidth + lineIndent);
+            widthHandler.updateMinChildWidth(minChildWidth);
+            widthHandler.updateMaxChildWidth(maxChildWidth);
 
             LineRenderer processedRenderer = null;
             if (result.getStatus() == LayoutResult.FULL) {
@@ -261,13 +265,18 @@ public class ParagraphRenderer extends BlockRenderer {
             } else if (textAlignment != TextAlignment.LEFT && processedRenderer != null) {
                 Rectangle actualLineLayoutBox = layoutBox.clone();
                 FloatingHelper.adjustLineAreaAccordingToFloats(floatRendererAreas, actualLineLayoutBox);
-                float deltaX = actualLineLayoutBox.getWidth() - lineIndent - processedRenderer.getOccupiedArea().getBBox().getWidth();
+                float deltaX = Math.max(0, actualLineLayoutBox.getWidth() - lineIndent - processedRenderer.getOccupiedArea().getBBox().getWidth());
                 switch (textAlignment) {
                     case RIGHT:
                         alignStaticKids(processedRenderer, deltaX);
                         break;
                     case CENTER:
                         alignStaticKids(processedRenderer, deltaX / 2);
+                        break;
+                    case JUSTIFIED:
+                        if (BaseDirection.RIGHT_TO_LEFT.equals(this.<BaseDirection>getProperty(Property.BASE_DIRECTION))) {
+                            alignStaticKids(processedRenderer, deltaX);
+                        }
                         break;
                 }
             }
