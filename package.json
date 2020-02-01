@@ -1,0 +1,20 @@
+{
+  "name": "itext7-js",
+  "version": "0.0.0",
+  "description": "Transcompiled version of Itext7 library",
+  "main": "index.js",
+  "scripts": {
+    "test": "xo && ava",
+    "clean": "rimraf dist",
+    "build": "./mvnw exec:java -D exec.args='-i=src/main/java -o=dist/'"
+  },
+  "engines": {
+    "node": ">=8",
+    "java": "8"
+  },
+  "author": "R.G. Wood <ric@grislyeye.com>",
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "rimraf": "^3.0.1"
+  }
+}
