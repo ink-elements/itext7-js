@@ -53,7 +53,6 @@ import com.itextpdf.io.source.RandomAccessSourceFactory;
 import com.itextpdf.io.source.WindowRandomAccessSource;
 import com.itextpdf.io.util.MessageFormatUtil;
 import com.itextpdf.kernel.PdfException;
-import com.itextpdf.kernel.crypto.securityhandler.UnsupportedSecurityHandlerException;
 import com.itextpdf.kernel.pdf.filters.FilterHandlers;
 import com.itextpdf.kernel.pdf.filters.IFilterHandler;
 import java.io.ByteArrayInputStream;
@@ -94,7 +93,6 @@ public class PdfReader implements Closeable, Serializable {
     private String sourcePath;
 
     protected PdfTokenizer tokens;
-    protected PdfEncryption decrypt;
 
     // here we store only the pdfVersion that is written in the document's header,
     // however it could differ from the actual pdf version that could be written in document's catalog
@@ -107,7 +105,6 @@ public class PdfReader implements Closeable, Serializable {
 
     protected ReaderProperties properties;
 
-    protected boolean encrypted = false;
     protected boolean rebuiltXref = false;
     protected boolean hybridXref = false;
     protected boolean fixedXref = false;
@@ -351,28 +348,6 @@ public class PdfReader implements Closeable, Serializable {
             file.seek(stream.getOffset());
             bytes = new byte[length];
             file.readFully(bytes);
-            if (decrypt != null && !decrypt.isEmbeddedFilesOnly()) {
-                PdfObject filter = stream.get(PdfName.Filter, true);
-                boolean skip = false;
-                if (filter != null) {
-                    if (PdfName.Crypt.equals(filter)) {
-                        skip = true;
-                    } else if (filter.getType() == PdfObject.ARRAY) {
-                        PdfArray filters = (PdfArray) filter;
-                        for (int k = 0; k < filters.size(); k++) {
-                            if (!filters.isEmpty() && PdfName.Crypt.equals(filters.get(k, true))) {
-                                skip = true;
-                                break;
-                            }
-                        }
-                    }
-                    filter.release();
-                }
-                if (!skip) {
-                    decrypt.setHashKeyForNextObject(stream.getIndirectReference().getObjNumber(), stream.getIndirectReference().getGenNumber());
-                    bytes = decrypt.decryptByteArray(bytes);
-                }
-            }
         } finally {
             try {
                 file.close();
@@ -529,7 +504,7 @@ public class PdfReader implements Closeable, Serializable {
             throw new PdfException(PdfException.DocumentHasNotBeenReadYet);
         }
 
-        return !encrypted || decrypt.isOpenedWithFullPermission() || unethicalReading;
+        return unethicalReading;
     }
 
     /**
@@ -552,27 +527,7 @@ public class PdfReader implements Closeable, Serializable {
         }
 
         long perm = 0;
-        if (encrypted && decrypt.getPermissions() != null) {
-            perm = (long) decrypt.getPermissions();
-        }
         return perm;
-    }
-
-    /**
-     * Gets encryption algorithm and access permissions.
-     *
-     * @see EncryptionConstants
-     * @throws PdfException, if the method has been invoked before the PDF document was read.
-     */
-    public int getCryptoMode() {
-        if (pdfDocument == null || !pdfDocument.getXref().isReadingCompleted()) {
-            throw new PdfException(PdfException.DocumentHasNotBeenReadYet);
-        }
-
-        if (decrypt == null)
-            return -1;
-        else
-            return decrypt.getCryptoMode();
     }
 
     /**
@@ -584,24 +539,6 @@ public class PdfReader implements Closeable, Serializable {
      */
     public PdfAConformanceLevel getPdfAConformanceLevel() {
         return pdfAConformanceLevel;
-    }
-
-    /**
-     * Computes user password if standard encryption handler is used with Standard40, Standard128 or AES128 encryption algorithm.
-     *
-     * @return user password, or null if not a standard encryption handler was used or if ownerPasswordUsed wasn't use to open the document.
-     * @throws PdfException, if the method has been invoked before the PDF document was read.
-     */
-    public byte[] computeUserPassword() {
-        if (pdfDocument == null || !pdfDocument.getXref().isReadingCompleted()) {
-            throw new PdfException(PdfException.DocumentHasNotBeenReadYet);
-        }
-
-        if (!encrypted || !decrypt.isOpenedWithFullPermission()) {
-            return null;
-        }
-
-        return decrypt.computeUserPassword(properties.password);
     }
 
     /**
@@ -653,17 +590,6 @@ public class PdfReader implements Closeable, Serializable {
     }
 
     /**
-     * @throws PdfException, if the method has been invoked before the PDF document was read.
-     */
-    public boolean isEncrypted() {
-        if (pdfDocument == null || !pdfDocument.getXref().isReadingCompleted()) {
-            throw new PdfException(PdfException.DocumentHasNotBeenReadYet);
-        }
-
-        return encrypted;
-    }
-
-    /**
      * Parses the entire PDF
      */
     protected void readPdf() throws IOException {
@@ -682,7 +608,6 @@ public class PdfReader implements Closeable, Serializable {
             rebuildXref();
         }
         pdfDocument.getXref().markReadingCompleted();
-        readDecryptObj();
     }
 
     protected void readObjectStream(PdfStream objectStream) throws IOException {
@@ -827,9 +752,6 @@ public class PdfReader implements Closeable, Serializable {
                 return new PdfNumber(tokens.getByteContent());
             case String: {
                 PdfString pdfString = new PdfString(tokens.getByteContent(), tokens.isHexString());
-                if (encrypted && !decrypt.isEmbeddedFilesOnly() && !objStm) {
-                    pdfString.setDecryption(currentIndirectReference.getObjNumber(), currentIndirectReference.getGenNumber(), decrypt);
-                }
                 return pdfString;
             }
             case Name:
@@ -1230,28 +1152,6 @@ public class PdfReader implements Closeable, Serializable {
 
     boolean isMemorySavingMode() {
         return memorySavingMode;
-    }
-
-    private void readDecryptObj() {
-        if (encrypted)
-            return;
-        PdfDictionary enc = trailer.getAsDictionary(PdfName.Encrypt);
-        if (enc == null)
-            return;
-        encrypted = true;
-
-        PdfName filter = enc.getAsName(PdfName.Filter);
-        if (PdfName.Adobe_PubSec.equals(filter)) {
-            if (properties.certificate == null) {
-                throw new PdfException(PdfException.CertificateIsNotProvidedDocumentIsEncryptedWithPublicKeyCertificate);
-            }
-            decrypt = new PdfEncryption(enc, properties.certificateKey, properties.certificate,
-                    properties.certificateKeyProvider, properties.externalDecryptionProcess);
-        } else if (PdfName.Standard.equals(filter)) {
-            decrypt = new PdfEncryption(enc, properties.password, getOriginalFileId());
-        } else {
-            throw new UnsupportedSecurityHandlerException(MessageFormatUtil.format(UnsupportedSecurityHandlerException.UnsupportedSecurityHandler, filter));
-        }
     }
 
     /**

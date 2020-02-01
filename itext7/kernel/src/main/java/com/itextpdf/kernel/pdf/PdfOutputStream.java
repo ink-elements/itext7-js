@@ -49,7 +49,6 @@ import com.itextpdf.io.source.ByteUtils;
 import com.itextpdf.io.source.DeflaterOutputStream;
 import com.itextpdf.io.source.OutputStream;
 import com.itextpdf.kernel.PdfException;
-import com.itextpdf.kernel.crypto.OutputStreamEncryption;
 import com.itextpdf.kernel.pdf.filters.FlateDecodeFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,10 +74,6 @@ public class PdfOutputStream extends OutputStream<PdfOutputStream> {
      * Document associated with PdfOutputStream.
      */
     protected PdfDocument document = null;
-    /**
-     * Contains the business logic for cryptography.
-     */
-    protected PdfEncryption crypto;
 
     /**
      * Create a pdfOutputSteam writing to the passed OutputStream.
@@ -246,7 +241,6 @@ public class PdfOutputStream extends OutputStream<PdfOutputStream> {
     }
 
     private void write(PdfString pdfString) {
-        pdfString.encrypt(crypto);
         if (pdfString.isHexWriting()) {
             writeByte('<');
             writeBytes(pdfString.getInternalContent());
@@ -297,10 +291,6 @@ public class PdfOutputStream extends OutputStream<PdfOutputStream> {
             if (pdfStream.getInputStream() != null) {
                 java.io.OutputStream fout = this;
                 DeflaterOutputStream def = null;
-                OutputStreamEncryption ose = null;
-                if (crypto != null && !crypto.isEmbeddedFilesOnly()) {
-                    fout = ose = crypto.getEncryptionStream(fout);
-                }
                 if (toCompress && (allowCompression || userDefinedCompression)) {
                     updateCompressionFilter(pdfStream);
                     fout = def = new DeflaterOutputStream(fout, pdfStream.getCompressionLevel(), 0x8000);
@@ -317,9 +307,6 @@ public class PdfOutputStream extends OutputStream<PdfOutputStream> {
                 }
                 if (def != null) {
                     def.finish();
-                }
-                if (ose != null) {
-                    ose.finish();
                 }
                 PdfNumber length = pdfStream.getAsNumber(PdfName.Length);
                 length.setValue((int) (getCurrentPos() - beginStreamContent));
@@ -366,13 +353,6 @@ public class PdfOutputStream extends OutputStream<PdfOutputStream> {
                             byteArrayStream = (ByteArrayOutputStream) pdfStream.getOutputStream().getOutputStream();
                         }
                     }
-                    if (checkEncryption(pdfStream)) {
-                        ByteArrayOutputStream encodedStream = new ByteArrayOutputStream();
-                        OutputStreamEncryption ose = crypto.getEncryptionStream(encodedStream);
-                        byteArrayStream.writeTo(ose);
-                        ose.finish();
-                        byteArrayStream = encodedStream;
-                    }
                 } catch (IOException ioe) {
                     throw new PdfException(PdfException.IoException, ioe);
                 }
@@ -386,28 +366,6 @@ public class PdfOutputStream extends OutputStream<PdfOutputStream> {
             }
         } catch (IOException e) {
             throw new PdfException(PdfException.CannotWriteToPdfStream, e, pdfStream);
-        }
-    }
-
-    protected boolean checkEncryption(PdfStream pdfStream) {
-        if (crypto == null || crypto.isEmbeddedFilesOnly()) {
-            return false;
-        } else if (isXRefStream(pdfStream)) {
-            // The cross-reference stream shall not be encrypted
-            return false;
-        } else {
-            PdfObject filter = pdfStream.get(PdfName.Filter, true);
-            if (filter != null) {
-                if (PdfName.Crypt.equals(filter)) {
-                    return false;
-                } else if (filter.getType() == PdfObject.ARRAY) {
-                    PdfArray filters = (PdfArray) filter;
-                    if (!filters.isEmpty() && PdfName.Crypt.equals(filters.get(0, true))) {
-                        return false;
-                    }
-                }
-            }
-            return true;
         }
     }
 

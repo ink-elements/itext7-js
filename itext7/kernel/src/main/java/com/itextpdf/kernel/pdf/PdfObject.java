@@ -45,7 +45,6 @@ package com.itextpdf.kernel.pdf;
 
 import com.itextpdf.io.LogMessageConstant;
 import com.itextpdf.kernel.PdfException;
-import com.itextpdf.kernel.crypto.BadPasswordException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -319,9 +318,6 @@ public abstract class PdfObject implements Serializable {
             // TODO checkState(MUST_BE_INDIRECT) now is always false, because indirectReference != null. See also DEVSIX-602
             if (indirectReference.getWriter() != null || checkState(MUST_BE_INDIRECT)) {
                 throw new PdfException(PdfException.CannotCopyIndirectObjectFromTheDocumentThatIsBeingWritten);
-            }
-            if (!indirectReference.getReader().isOpenedWithFullPermission()) {
-                throw new BadPasswordException(BadPasswordException.PdfReaderNotOpenedWithOwnerPassword);
             }
         }
 

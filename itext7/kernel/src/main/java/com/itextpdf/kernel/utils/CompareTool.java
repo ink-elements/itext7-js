@@ -403,7 +403,7 @@ public class CompareTool {
      * @see #compareVisually(String, String, String, String)
      */
     public String compareByContent(String outPdf, String cmpPdf, String outPath) throws InterruptedException, IOException {
-        return compareByContent(outPdf, cmpPdf, outPath, null, null, null, null);
+        return compareByContent(outPdf, cmpPdf, outPath, null, null);
     }
 
     /**
@@ -430,43 +430,13 @@ public class CompareTool {
      * @see #compareVisually(String, String, String, String)
      */
     public String compareByContent(String outPdf, String cmpPdf, String outPath, String differenceImagePrefix) throws InterruptedException, IOException {
-        return compareByContent(outPdf, cmpPdf, outPath, differenceImagePrefix, null, null, null);
+        return compareByContent(outPdf, cmpPdf, outPath, differenceImagePrefix, null);
     }
 
     /**
      * This method overload is used to compare two encrypted PDF documents. Document passwords are passed with
      * outPass and cmpPass parameters.
      * <p>
-     * Compares two PDF documents by content starting from page dictionaries and then recursively comparing
-     * corresponding objects which are referenced from them. You can roughly imagine it as depth-first traversal
-     * of the two trees that represent pdf objects structure of the documents.
-     * <p>
-     * When comparison by content is finished, if any differences were found, visual comparison is automatically started.
-     * For more info see {@link #compareVisually(String, String, String, String)}.
-     * <p>
-     * For more explanations about what outPdf and cmpPdf are see last paragraph of the {@link CompareTool}
-     * class description.
-     *
-     * @param outPdf                the absolute path to the output file, which is to be compared to cmp-file.
-     * @param cmpPdf                the absolute path to the cmp-file, which is to be compared to output file.
-     * @param outPath               the absolute path to the folder, which will be used to store image files for visual comparison.
-     * @param differenceImagePrefix file name prefix for image files with marked visual differences if there is any;
-     *                              if it's set to null the prefix defaults to diff_%outPdfFileName%_ format.
-     * @param outPass               password for the encrypted document specified by the outPdf absolute path.
-     * @param cmpPass               password for the encrypted document specified by the cmpPdf absolute path.
-     * @return string containing text report on the encountered content differences and also list of the pages that are
-     * visually different, or null if there are no content and therefore no visual differences.
-     * @throws InterruptedException if the current thread is interrupted by another thread while it is waiting
-     *                              for ghostscript or imagemagic processes, then the wait is ended and an {@link InterruptedException} is thrown.
-     * @throws IOException          is thrown if any of the input files are missing or any of the auxiliary files
-     *                              that are created during comparison process weren't possible to be created.
-     * @see #compareVisually(String, String, String, String)
-     */
-    public String compareByContent(String outPdf, String cmpPdf, String outPath, String differenceImagePrefix, byte[] outPass, byte[] cmpPass) throws InterruptedException, IOException {
-        return compareByContent(outPdf, cmpPdf, outPath, differenceImagePrefix, null, outPass, cmpPass);
-    }
-
-    /**
      * Compares two PDF documents by content starting from page dictionaries and then recursively comparing
      * corresponding objects which are referenced from them. You can roughly imagine it as depth-first traversal
      * of the two trees that represent pdf objects structure of the documents.
@@ -491,43 +461,9 @@ public class CompareTool {
      * @see #compareVisually(String, String, String, String)
      */
     public String compareByContent(String outPdf, String cmpPdf, String outPath, String differenceImagePrefix, Map<Integer, List<Rectangle>> ignoredAreas) throws InterruptedException, IOException {
-        return compareByContent(outPdf, cmpPdf, outPath, differenceImagePrefix, ignoredAreas, null, null);
-    }
-
-    /**
-     * This method overload is used to compare two encrypted PDF documents. Document passwords are passed with
-     * outPass and cmpPass parameters.
-     * <p>
-     * Compares two PDF documents by content starting from page dictionaries and then recursively comparing
-     * corresponding objects which are referenced from them. You can roughly imagine it as depth-first traversal
-     * of the two trees that represent pdf objects structure of the documents.
-     * <p>
-     * When comparison by content is finished, if any differences were found, visual comparison is automatically started.
-     * <p>
-     * For more explanations about what outPdf and cmpPdf are see last paragraph of the {@link CompareTool}
-     * class description.
-     *
-     * @param outPdf                the absolute path to the output file, which is to be compared to cmp-file.
-     * @param cmpPdf                the absolute path to the cmp-file, which is to be compared to output file.
-     * @param outPath               the absolute path to the folder, which will be used to store image files for visual comparison.
-     * @param differenceImagePrefix file name prefix for image files with marked visual differences if there are any;
-     *                              if it's set to null the prefix defaults to diff_%outPdfFileName%_ format.
-     * @param ignoredAreas          a map with one-based page numbers as keys and lists of ignored rectangles as values.
-     * @param outPass               password for the encrypted document specified by the outPdf absolute path.
-     * @param cmpPass               password for the encrypted document specified by the cmpPdf absolute path.
-     * @return string containing text report on the encountered content differences and also list of the pages that are
-     * visually different, or null if there are no content and therefore no visual differences.
-     * @throws InterruptedException if the current thread is interrupted by another thread while it is waiting
-     *                              for ghostscript or imagemagic processes, then the wait is ended and an {@link InterruptedException} is thrown.
-     * @throws IOException          is thrown if any of the input files are missing or any of the auxiliary files
-     *                              that are created during comparison process weren't possible to be created.
-     * @see #compareVisually(String, String, String, String)
-     */
-    public String compareByContent(String outPdf, String cmpPdf, String outPath, String differenceImagePrefix, Map<Integer, List<Rectangle>> ignoredAreas, byte[] outPass, byte[] cmpPass) throws InterruptedException, IOException {
         init(outPdf, cmpPdf);
         System.out.println("Out pdf: file:///" + UrlUtil.toNormalizedURI(outPdf).getPath());
         System.out.println("Cmp pdf: file:///" + UrlUtil.toNormalizedURI(cmpPdf).getPath() + "\n");
-        setPassword(outPass, cmpPass);
         return compareByContent(outPath, differenceImagePrefix, ignoredAreas);
     }
 
@@ -769,15 +705,12 @@ public class CompareTool {
      *
      * @param outPdf  the absolute path to the output file, which info is to be compared to cmp-file info.
      * @param cmpPdf  the absolute path to the cmp-file, which info is to be compared to output file info.
-     * @param outPass password for the encrypted document specified by the outPdf absolute path.
-     * @param cmpPass password for the encrypted document specified by the cmpPdf absolute path.
      * @return text report on the differences in documents infos.
      * @throws IOException
      */
-    public String compareDocumentInfo(String outPdf, String cmpPdf, byte[] outPass, byte[] cmpPass) throws IOException {
+    public String compareDocumentInfo(String outPdf, String cmpPdf) throws IOException {
         System.out.print("[itext] INFO  Comparing document info.......");
         String message = null;
-        setPassword(outPass, cmpPass);
         PdfDocument outDocument = new PdfDocument(new PdfReader(outPdf, getOutReaderProperties()), new DocumentProperties().setEventCountingMetaInfo(metaInfo));
         PdfDocument cmpDocument = new PdfDocument(new PdfReader(cmpPdf, getCmpReaderProperties()), new DocumentProperties().setEventCountingMetaInfo(metaInfo));
         String[] cmpInfo = convertInfo(cmpDocument.getDocumentInfo());
@@ -797,18 +730,6 @@ public class CompareTool {
             System.out.println("Fail");
         System.out.flush();
         return message;
-    }
-
-    /**
-     * Compares document info dictionaries of two pdf documents.
-     *
-     * @param outPdf the absolute path to the output file, which info is to be compared to cmp-file info.
-     * @param cmpPdf the absolute path to the cmp-file, which info is to be compared to output file info.
-     * @return text report on the differences in documents infos.
-     * @throws IOException
-     */
-    public String compareDocumentInfo(String outPdf, String cmpPdf) throws IOException {
-        return compareDocumentInfo(outPdf, cmpPdf, null, null);
     }
 
     /**
@@ -928,15 +849,6 @@ public class CompareTool {
         outImage = outPdfName + "-%03d.png";
         if (cmpPdfName.startsWith("cmp_")) cmpImage = cmpPdfName + "-%03d.png";
         else cmpImage = "cmp_" + cmpPdfName + "-%03d.png";
-    }
-
-    private void setPassword(byte[] outPass, byte[] cmpPass) {
-        if (outPass != null) {
-            getOutReaderProperties().setPassword(outPass);
-        }
-        if (cmpPass != null) {
-            getCmpReaderProperties().setPassword(outPass);
-        }
     }
 
     private String compareVisually(String outPath, String differenceImagePrefix, Map<Integer, List<Rectangle>> ignoredAreas) throws InterruptedException, IOException {

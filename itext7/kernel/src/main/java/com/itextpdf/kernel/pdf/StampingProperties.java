@@ -50,7 +50,6 @@ public class StampingProperties extends DocumentProperties implements Serializab
     private static final long serialVersionUID = 6108082513101777457L;
 
     protected boolean appendMode = false;
-    protected boolean preserveEncryption = false;
 
     public StampingProperties() {
     }
@@ -58,7 +57,6 @@ public class StampingProperties extends DocumentProperties implements Serializab
     public StampingProperties(StampingProperties other) {
         super(other);
         this.appendMode = other.appendMode;
-        this.preserveEncryption = other.preserveEncryption;
     }
 
     /**
@@ -70,13 +68,4 @@ public class StampingProperties extends DocumentProperties implements Serializab
         return this;
     }
 
-    /**
-     * Defines if the encryption of the original document (if it was encrypted) will be preserved.
-     * By default, the resultant document doesn't preserve the original encryption.
-     * @return this {@link StampingProperties} instance
-     */
-    public StampingProperties preserveEncryption() {
-        this.preserveEncryption = true;
-        return this;
-    }
 }

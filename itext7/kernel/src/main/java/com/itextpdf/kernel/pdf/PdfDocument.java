@@ -54,7 +54,6 @@ import com.itextpdf.kernel.Version;
 import com.itextpdf.kernel.VersionInfo;
 import com.itextpdf.kernel.counter.EventCounterHandler;
 import com.itextpdf.kernel.counter.event.CoreEvent;
-import com.itextpdf.kernel.crypto.BadPasswordException;
 import com.itextpdf.kernel.events.EventDispatcher;
 import com.itextpdf.kernel.events.IEventDispatcher;
 import com.itextpdf.kernel.events.IEventHandler;
@@ -310,16 +309,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
         this.reader = reader;
         this.writer = writer;
         this.properties = properties;
-
-        boolean writerHasEncryption = writerHasEncryption();
-        if (properties.appendMode && writerHasEncryption) {
-            Logger logger = LoggerFactory.getLogger(PdfDocument.class);
-            logger.warn(LogMessageConstant.WRITER_ENCRYPTION_IS_IGNORED_APPEND);
-        }
-        if (properties.preserveEncryption && writerHasEncryption) {
-            Logger logger = LoggerFactory.getLogger(PdfDocument.class);
-            logger.warn(LogMessageConstant.WRITER_ENCRYPTION_IS_IGNORED_PRESERVE);
-        }
 
         open(writer.properties.pdfVersion);
     }
@@ -831,15 +820,9 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                     }
                     xmp.put(PdfName.Type, PdfName.Metadata);
                     xmp.put(PdfName.Subtype, PdfName.XML);
-                    if (writer.crypto != null && !writer.crypto.isMetadataEncrypted()) {
-                        PdfArray ar = new PdfArray();
-                        ar.add(PdfName.Crypt);
-                        xmp.put(PdfName.Filter, ar);
-                    }
                 }
                 checkIsoConformance();
 
-                PdfObject crypto = null;
                 Set<PdfIndirectReference> forbiddenToFlush = new HashSet<>();
                 if (properties.appendMode) {
                     if (structTreeRoot != null) {
@@ -870,16 +853,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                         info.getPdfObject().flush(false);
                     }
                     flushFonts();
-
-
-                    if (writer.crypto != null) {
-                        assert reader.decrypt.getPdfObject() == writer.crypto.getPdfObject() : "Conflict with source encryption";
-                        crypto = reader.decrypt.getPdfObject();
-                        if (crypto.getIndirectReference() != null) {
-                            // Checking just for extra safety, encryption dictionary shall never be direct.
-                            forbiddenToFlush.add(crypto.getIndirectReference());
-                        }
-                    }
 
                     writer.flushModifiedWaitingObjects(forbiddenToFlush);
                     for (int i = 0; i < xref.size(); i++) {
@@ -918,12 +891,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                     info.getPdfObject().flush(false);
                     flushFonts();
 
-                    if (writer.crypto != null) {
-                        crypto = writer.crypto.getPdfObject();
-                        crypto.makeIndirect(this);
-                        forbiddenToFlush.add(crypto.getIndirectReference());
-                    }
-
                     writer.flushWaitingObjects(forbiddenToFlush);
                     for (int i = 0; i < xref.size(); i++) {
                         PdfIndirectReference indirectReference = xref.get(i);
@@ -938,15 +905,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                     }
                 }
 
-                // To avoid encryption of XrefStream and Encryption dictionary remove crypto.
-                // NOTE. No need in reverting, because it is the last operation with the document.
-                writer.crypto = null;
-
-                if (!properties.appendMode && crypto != null) {
-                    // no need to flush crypto in append mode, it shall not have changed in this case
-                    crypto.flush(false);
-                }
-
                 // The following two operators prevents the possible inconsistency between root and info
                 // entries existing in the trailer object and corresponding fields. This inconsistency
                 // may appear when user gets trailer and explicitly sets new root or info dictionaries.
@@ -956,9 +914,9 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
 
                 //By this time original and modified document ids should always be not null due to initializing in
                 // either writer properties, or in the writer init section on document open or from pdfreader. So we shouldn't worry about it being null next
-                PdfObject fileId = PdfEncryption.createInfoId(ByteUtils.getIsoBytes(originalDocumentId.getValue()),
+                PdfObject fileId = createInfoId(ByteUtils.getIsoBytes(originalDocumentId.getValue()),
                         ByteUtils.getIsoBytes(modifiedDocumentId.getValue()));
-                xref.writeXrefTableAndTrailer(this, fileId, crypto);
+                xref.writeXrefTableAndTrailer(this, fileId);
                 writer.flush();
                 for (ICounter counter : getCounters()) {
                     counter.onDocumentWritten(writer.getCurrentPos());
@@ -989,6 +947,46 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
 
         }
         closed = true;
+    }
+
+
+    /**
+     * Creates a PdfLiteral that contains an array of two id entries. These entries are both hexadecimal
+     * strings containing 16 hex characters. The first entry is the original id, the second entry
+     * should be different from the first one if the document has changed.
+     *
+     * @param firstId the first id
+     * @param secondId the second id
+     * @return PdfObject containing the two entries.
+     */
+    private static PdfObject createInfoId(byte[] firstId, byte[] secondId) {
+        if ( firstId.length < 16 ) {
+            firstId = padByteArrayTo16(firstId);
+        }
+
+        if ( secondId.length < 16 ) {
+            secondId = padByteArrayTo16(secondId);
+        }
+
+        com.itextpdf.io.source.ByteBuffer buf = new com.itextpdf.io.source.ByteBuffer(90);
+        buf.append('[').append('<');
+
+        for (int k = 0; k < firstId.length; ++k)
+            buf.appendHex(firstId[k]);
+        buf.append('>').append('<');
+        for (int k = 0; k < secondId.length; ++k)
+            buf.appendHex(secondId[k]);
+        buf.append('>').append(']');
+
+        return new PdfLiteral(buf.toByteArray());
+    }
+
+    private static byte[] padByteArrayTo16(byte[] documentId) {
+        byte[] paddingBytes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+
+        System.arraycopy(documentId, 0, paddingBytes, 0, documentId.length);
+
+        return paddingBytes;
     }
 
     /**
@@ -1521,9 +1519,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
      * @return encrypted payload of this document.
      */
     public PdfEncryptedPayloadDocument getEncryptedPayloadDocument() {
-        if (getReader() != null && getReader().isEncrypted()) {
-            return null;
-        }
         PdfCollection collection = getCatalog().getCollection();
         if (collection != null && collection.isViewHidden()) {
             PdfString documentName = collection.getInitialDocument();
@@ -1561,9 +1556,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
     public void setEncryptedPayload(PdfFileSpec fs) {
         if (getWriter() == null) {
             throw new PdfException(PdfException.CannotSetEncryptedPayloadToDocumentOpenedInReadingMode);
-        }
-        if (writerHasEncryption()) {
-            throw new PdfException(PdfException.CannotSetEncryptedPayloadToEncryptedDocument);
         }
         if (!PdfName.EncryptedPayload.equals(((PdfDictionary) fs.getPdfObject()).get(PdfName.AFRelationship))) {
             LoggerFactory.getLogger(getClass()).error(LogMessageConstant.ENCRYPTED_PAYLOAD_FILE_SPEC_SHALL_HAVE_AFRELATIONSHIP_FILED_EQUAL_TO_ENCRYPTED_PAYLOAD);
@@ -1882,12 +1874,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                 if (reader != null && reader.hasXrefStm() && writer.properties.isFullCompression == null) {
                     writer.properties.isFullCompression = true;
                 }
-                if (reader != null && !reader.isOpenedWithFullPermission()) {
-                    throw new BadPasswordException(BadPasswordException.PdfReaderNotOpenedWithOwnerPassword);
-                }
-                if (reader != null && properties.preserveEncryption) {
-                    writer.crypto = reader.decrypt;
-                }
                 writer.document = this;
                 if (reader == null) {
                     catalog = new PdfCatalog(this);
@@ -1908,10 +1894,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
 
                 if (writer.properties != null) {
                     PdfString readerModifiedId = modifiedDocumentId;
-                    if (writer.properties.initialDocumentId != null &&
-                            !(reader != null && reader.decrypt != null && (properties.appendMode || properties.preserveEncryption))) {
-                        originalDocumentId = writer.properties.initialDocumentId;
-                    }
                     if (writer.properties.modifiedDocumentId != null) {
                         modifiedDocumentId = writer.properties.modifiedDocumentId;
                     }
@@ -1919,13 +1901,7 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                         originalDocumentId = modifiedDocumentId;
                     }
                     if (modifiedDocumentId == null) {
-                        if (originalDocumentId == null) {
-                            originalDocumentId = new PdfString(PdfEncryption.generateNewDocumentId());
-                        }
                         modifiedDocumentId = originalDocumentId;
-                    }
-                    if(writer.properties.modifiedDocumentId == null && modifiedDocumentId.equals(readerModifiedId)) {
-                        modifiedDocumentId = new PdfString(PdfEncryption.generateNewDocumentId());
                     }
                 }
 
@@ -1945,8 +1921,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                 writer.write((byte) '\n');
                 //TODO log if full compression differs
                 writer.properties.isFullCompression = reader.hasXrefStm();
-
-                writer.crypto = reader.decrypt;
 
                 if (newPdfVersion != null) {
                     // In PDF 1.4, a PDF version can also be specified in the Version entry of the document catalog,
@@ -1971,20 +1945,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
                     pdfVersion = newPdfVersion;
                 }
                 writer.writeHeader();
-
-                if (writer.crypto == null) {
-                    writer.initCryptoIfSpecified(pdfVersion);
-                }
-                if (writer.crypto != null) {
-                    if (writer.crypto.getCryptoMode() < EncryptionConstants.ENCRYPTION_AES_256) {
-                        VersionConforming.validatePdfVersionForDeprecatedFeatureLogWarn(this, PdfVersion.PDF_2_0, VersionConforming.DEPRECATED_ENCRYPTION_ALGORITHMS);
-                    } else if (writer.crypto.getCryptoMode() == EncryptionConstants.ENCRYPTION_AES_256) {
-                        PdfNumber r = writer.crypto.getPdfObject().getAsNumber(PdfName.R);
-                        if (r != null && r.intValue() == 5) {
-                            VersionConforming.validatePdfVersionForDeprecatedFeatureLogWarn(this, PdfVersion.PDF_2_0, VersionConforming.DEPRECATED_AES256_REVISION);
-                        }
-                    }
-                }
             }
         } catch (IOException e) {
             throw new PdfException(PdfException.CannotOpenDocument, e, this);
@@ -2357,10 +2317,6 @@ public class PdfDocument implements IEventDispatcher, Closeable, Serializable {
             LoggerFactory.getLogger(getClass()).warn(LogMessageConstant.TAG_STRUCTURE_CONTEXT_WILL_BE_REINITIALIZED_ON_SERIALIZATION);
         }
         out.defaultWriteObject();
-    }
-
-    private boolean writerHasEncryption() {
-        return writer.properties.isStandardEncryptionUsed() || writer.properties.isPublicKeyEncryptionUsed();
     }
 
     /**

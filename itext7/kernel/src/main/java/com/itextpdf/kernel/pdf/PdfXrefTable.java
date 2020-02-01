@@ -234,7 +234,7 @@ class PdfXrefTable implements Serializable {
      *
      * @throws IOException
      */
-    protected void writeXrefTableAndTrailer(PdfDocument document, PdfObject fileId, PdfObject crypto) throws IOException {
+    protected void writeXrefTableAndTrailer(PdfDocument document, PdfObject fileId) throws IOException {
         PdfWriter writer = document.getWriter();
 
         if (!document.properties.appendMode) {
@@ -264,8 +264,6 @@ class PdfXrefTable implements Serializable {
             xrefStream.makeIndirect(document);
             xrefStream.put(PdfName.Type, PdfName.XRef);
             xrefStream.put(PdfName.ID, fileId);
-            if (crypto != null)
-                xrefStream.put(PdfName.Encrypt, crypto);
             xrefStream.put(PdfName.Size, new PdfNumber(this.size()));
 
             int offsetSize = getOffsetSize(Math.max(startxref, size()));
@@ -350,8 +348,6 @@ class PdfXrefTable implements Serializable {
             if (xRefStmPos != -1) {
                 trailer.put(PdfName.XRefStm, new PdfNumber(xRefStmPos));
             }
-            if (crypto != null)
-                trailer.put(PdfName.Encrypt, crypto);
             writer.writeString("trailer\n");
             if (document.properties.appendMode) {
                 PdfNumber lastXref = new PdfNumber(document.reader.getLastXref());

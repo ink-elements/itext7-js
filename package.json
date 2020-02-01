@@ -6,7 +6,7 @@
   "scripts": {
     "test": "xo && ava",
     "clean": "rimraf dist",
-    "build": "./mvnw exec:java -D exec.args='-i=src/main/java -o=dist/'"
+    "build": "./mvnw exec:java -D exec.args='-i=src/main/java:itext7/io/src/main/java:itext7/kernel/src/main/java -o=dist/'"
   },
   "engines": {
     "node": ">=8",

@@ -272,17 +272,6 @@ public class PdfWriter extends PdfOutputStream implements Serializable {
         return objectStream;
     }
 
-    protected void initCryptoIfSpecified(PdfVersion version) {
-        EncryptionProperties encryptProps = properties.encryptionProperties;
-        if (properties.isStandardEncryptionUsed()) {
-            crypto = new PdfEncryption(encryptProps.userPassword, encryptProps.ownerPassword, encryptProps.standardEncryptPermissions,
-                    encryptProps.encryptionAlgorithm, ByteUtils.getIsoBytes(this.document.getOriginalDocumentId().getValue()), version);
-        } else if (properties.isPublicKeyEncryptionUsed()) {
-            crypto = new PdfEncryption(encryptProps.publicCertificates,
-                    encryptProps.publicKeyEncryptPermissions, encryptProps.encryptionAlgorithm, version);
-        }
-    }
-
     /**
      * Flushes the object. Override this method if you want to define custom behaviour for object flushing.
      *
@@ -384,9 +373,6 @@ public class PdfWriter extends PdfOutputStream implements Serializable {
      * @throws IOException
      */
     protected void writeToBody(PdfObject pdfObj) throws IOException {
-        if (crypto != null) {
-            crypto.setHashKeyForNextObject(pdfObj.getIndirectReference().getObjNumber(), pdfObj.getIndirectReference().getGenNumber());
-        }
         writeInteger(pdfObj.getIndirectReference().getObjNumber()).
                 writeSpace().
                 writeInteger(pdfObj.getIndirectReference().getGenNumber()).writeBytes(obj);
