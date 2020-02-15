@@ -1,33 +1,25 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.grislyeye</groupId>
   <artifactId>itext7-js</artifactId>
   <version>0.0.0</version>
-
-  <repositories>
-    <repository>
-      <id>jsweet-central</id>
-      <url>http://repository.jsweet.org/artifactory/libs-release-local</url>
-    </repository>
-  </repositories>
-
   <dependencies>
     <dependency>
-      <groupId>org.jsweet</groupId>
-      <artifactId>jsweet-transpiler</artifactId>
-      <version>2.3.5</version>
+      <groupId>com.google.gwt</groupId>
+      <artifactId>gwt-dev</artifactId>
+      <version>2.8.2</version>
     </dependency>
   </dependencies>
-
   <build>
     <plugins>
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>1.6.0</version>
+        <groupId>net.ltgt.gwt.maven</groupId>
+        <artifactId>gwt-maven-plugin</artifactId>
+        <version>1.0.0</version>
+        <extensions>true</extensions>
         <configuration>
-          <mainClass>org.jsweet.JSweetCommandLineLauncher</mainClass>
+          <moduleName>itext7</moduleName>
         </configuration>
       </plugin>
     </plugins>
