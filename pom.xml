@@ -22,7 +22,12 @@
     <dependency>
       <groupId>org.jsweet</groupId>
       <artifactId>jsweet-transpiler</artifactId>
-      <version>2.3.8-SNAPSHOT</version>
+      <version>3.0.0-RC4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jsweet.v3</groupId>
+      <artifactId>jsweet-core</artifactId>
+      <version>6.0.0</version>
     </dependency>
   </dependencies>
 
