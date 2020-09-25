@@ -9,6 +9,8 @@
     <repository>
       <id>jsweet-central</id>
       <url>http://repository.jsweet.org/artifactory/libs-release-local</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
     </repository>
     <repository>
       <id>jsweet-central-snapshot</id>
@@ -20,9 +22,9 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.jsweet</groupId>
+      <groupId>org.jsweet.v3</groupId>
       <artifactId>jsweet-transpiler</artifactId>
-      <version>3.0.0-RC4</version>
+      <version>3.0.0-RC5</version>
     </dependency>
     <dependency>
       <groupId>org.jsweet.v3</groupId>
